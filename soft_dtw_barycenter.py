@@ -5,19 +5,33 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tslearn.preprocessing import TimeSeriesResampler
 import time
-#target_length制定重新采样后的电流长度
-#start, end制定选取序列的范围
-#gamma设定soft_dtw的超参数
-#inverse制定是否将得到的序列颠倒（用语比较相反方向过孔）
-#choose color指定画出重心序列的颜色
-#plot指定在这个程序中是否画图（在别的程序中引用这个程序中的函数的输出值的时候不需要画图）
-#max_iter指定在得到重心序列中的最大迭代次数（太多计算时间增加，太少得到的不准确）
-#tol指定收敛范围,作用类似max_iter
-def barycenter_plot(data,target_length=500, start=None,end=None,gamma=None,inverse=False, 
-                    choose_color='red',plot=False,max_iter=50,tol=1e-3):
+from typing import List, Optional, Tuple
+
+def barycenter_plot(data: List[np.ndarray], target_length: int = 500, start: Optional[int] = None, end: Optional[int] = None, gamma: Optional[float] = None, inverse: bool = False, 
+                    choose_color: str = 'red', plot: bool = False, max_iter: int = 50, tol: float = 1e-3) -> Tuple[List[np.ndarray], np.ndarray, List[np.ndarray]]:
+    """
+    Computes the barycenter (average) of time series data using Soft DTW and optionally plots it.
+
+    Inputs:
+    - data: List[np.ndarray] - List of time series data arrays to compute barycenter for.
+    - target_length: int - Target length for resampling (default: 500).
+    - start: Optional[int] - Starting index for data slicing (default: None).
+    - end: Optional[int] - Ending index for data slicing (default: None).
+    - gamma: Optional[float] - Gamma parameter for Soft DTW (default: None, auto-selected).
+    - inverse: bool - Whether to flip the barycenter (default: False).
+    - choose_color: str - Color for plotting (default: 'red').
+    - plot: bool - Whether to plot the barycenter (default: False).
+    - max_iter: int - Maximum iterations for barycenter computation (default: 50).
+    - tol: float - Tolerance for convergence (default: 1e-3).
+
+    Outputs:
+    - currents_resampled: List[np.ndarray] - List of resampled current data arrays.
+    - barycenter: np.ndarray - Computed barycenter array.
+    - time_series: List[np.ndarray] - Time series representation of the barycenter.
+    """
     resampler=TimeSeriesResampler(sz=target_length)
     currents_resampled=[resampler.fit_transform(series).ravel() for series in data[start:end]]
-# 调用 softdtw_barycenter 函数计算重心
+
     if gamma is None:
         gamma_select=[]
         for i in range(5):
@@ -34,32 +48,21 @@ def barycenter_plot(data,target_length=500, start=None,end=None,gamma=None,inver
     time_series=[np.array([time,barycenter.ravel()])]   
     
     if plot==True:
-    # 步骤 4: 可视化结果
-    # 设置图片清晰度
+
         
         plt.rcParams['figure.dpi'] = 100
 
-    # 绘制原始时间序列
-        #for current in currents_resampled:
-        #    plt.plot(time,current, c='k',alpha=0.5,linestyle='-')
 
-    # 绘制计算得到的重心
         plt.plot(time,barycenter, label='SoftDTW Barycenter', color=choose_color, linewidth=2)
 
-    # 添加图例和标题
+
         plt.legend()
         plt.title('SoftDTW Barycenter Plot')
         plt.xlabel('Time Index')
         plt.ylabel('Normalized Current')
         
 
-# 显示图形
-    #plt.show()
-    
-    #currents_resampled是重新调整到相同长度之后的电流,为一个列表中的多个一维数组
-    
-    #barycenter为得到的电流的重心序列，为一维数组
-    #time_series为barycenter加上与之匹配的时间之后的二维数组
+
     return currents_resampled,barycenter,time_series
     
 

@@ -3,10 +3,7 @@ import os
 from dtw_alignment import dtw_alignment
 from Signal_Processing_and_Alignment import Signal_Processing
 
-'''
-输出文件到excel
-存储路径和文件名
-'''
+
 
 def export_data(data,save_path='',file_name='1'):
     data_processed=[]
@@ -20,20 +17,20 @@ def export_data(data,save_path='',file_name='1'):
             
             
     
-#merge all the data 
+
     max_length = max([df.shape[0] for df in data_processed])
 
-    # 填充每个 DataFrame 至最大行数
+
     for i, df in enumerate(data_processed):
         if df.shape[0] < max_length:
             num_missing = max_length - df.shape[0]
             missing_df = pd.DataFrame(index=range(num_missing), columns=df.columns)
             data_processed[i] = pd.concat([df, missing_df], ignore_index=True)
 
-    # 水平拼接所有 DataFrame
+
     combined_df = pd.concat(data_processed, axis=1)
 
-    # 导出为 Excel 文件
+
     cur_dir=os.getcwd()
     abs_save_path=os.path.join(cur_dir,save_path)
     if not os.path.exists(abs_save_path):

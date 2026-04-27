@@ -1,0 +1,26 @@
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
+
+ReadMe.docx
+
+
+
+
+
+__pycache__/
+*.pyc
+figure/
+figure_final/
+final_export/
+data_export/
+final_export_data/
+radius_compare_smooth/
+radius_compare/
+Wanunu_figure/
+schematic_figure/
+radius_adjustment/
+
+# Ignore all logs, but keep an important one
+*.log
+*.png
