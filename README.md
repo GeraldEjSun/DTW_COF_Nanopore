@@ -413,6 +413,7 @@ DTW_COF_Nanopore/
 ├── dtw_alignment_1d_time.py      # Optimized 1D DTW with time reconstruction
 ├── dtw_alignment_1d.py           # Lightweight 1D DTW (current-only)
 ├── dtw_alignment_interplotation.py  # DTW with explicit pre-resampling
+├── ddtw.py                       # DTW with peak-valley and derivative feature to enhance alignment performance
 ├── soft_DTW_barycenter.py        # Soft-DTW barycenter computation
 ├── main.ipynb                    # Interactive analysis notebook
 ├── data_final/                   # Processed data directory
@@ -450,11 +451,11 @@ DTW_COF_Nanopore/
 If you use this toolkit in your research, please cite:
 
 ```bibtex
-@article{YourAuthor2024,
-  title={DNA Sequencing via Electroporated 2D COF-Lipid Composite Nanopore},
-  author={Author, et al.},
+@article{DTW_alignment2026,
+  title={Electroporated 2D COF-Lipid Composite Nanopore for Highly Sensitive Single Molecule DNA Sequencing},
+  author={Jie Chen, Shuling Fan, Yijie Sun, Linru Guo, Xing-Hua Xia, Wei Li, Shibin Ren, Kang Wang},
   journal={Journal Name},
-  year={2024}
+  year={2026}
 }
 ```
 
@@ -470,7 +471,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 For questions, issues, or contributions, please:
 - Open an issue on GitHub
-- Contact the maintainers at [your-email@institution.edu]
+- Contact the maintainers at []
 
 ---
 
