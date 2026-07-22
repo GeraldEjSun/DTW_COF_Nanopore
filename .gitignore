@@ -2,14 +2,14 @@
 .DS_Store
 Thumbs.db
 
+# Documents
 ReadMe.docx
 
-
-
-
-
+# Python cache
 __pycache__/
 *.pyc
+
+# Project folders
 figure/
 figure_final/
 final_export/
@@ -21,6 +21,6 @@ Wanunu_figure/
 schematic_figure/
 radius_adjustment/
 
-# Ignore all logs, but keep an important one
+# Ignore logs and images
 *.log
 *.png
