@@ -437,3 +437,180 @@ def export_data(data: List[Union[np.ndarray, pd.DataFrame]], save_path: str = ''
     if not os.path.exists(abs_save_path):
         os.makedirs(abs_save_path)
     combined_df.to_excel(os.path.join(abs_save_path,file_name+'.xlsx'), index=False)
+    
+    
+def ddtw_processing(signal_avg_1: Union[List[float], np.ndarray, pd.Series], signal_avg_2: Union[List[float], np.ndarray, pd.Series], signal_weight: float = 1.0,
+                    derivative_weight: float = 1.6, extrema_weight: float = 7.4, prominence_value:float = 0.05) -> Tuple[object, object, dict]:
+    """
+    Performs peak-valley enhanced derivative-DTW alignment between two average signals and plots the results.
+
+    Inputs:
+    - signal_avg_1: Union[List[float], np.ndarray, pd.Series] - Reference average signal current values.
+    - signal_avg_2: Union[List[float], np.ndarray, pd.Series] - Target average signal current values to align.
+    - signal_weight: float - Weight applied to the original signal feature (default: 1.0).
+    - derivative_weight: float - Weight applied to the first-order derivative feature (default: 1.6).
+    - extrema_weight: float - Weight applied to peak and valley marker features (default: 7.4).
+    - prominence_value: float - Minimum prominence for peak and valley detection (default: 0.05).
+
+    Outputs:
+    - alignment_figure: object - Plot comparing signal_avg_1 with the DTW-aligned signal_avg_2.
+    - mapping_figure: object - Plot showing peak and valley mappings before warping.
+    - mse_values: dict - Dictionary containing DTW distance, raw MSE values, and linearly corrected MSE values.
+    """
+    from scipy.signal import resample, find_peaks
+    from sklearn.metrics import mean_squared_error
+
+    smooth_sigma=0
+    radius_value=100
+    prominence_value=prominence_value
+
+    def zscore(y: Union[List[float], np.ndarray, pd.Series]) -> np.ndarray:
+        y=np.asarray(y,dtype=float)
+        return (y-np.mean(y))/(np.std(y)+1e-8)
+
+    def fill_nan_by_interp(y: Union[List[float], np.ndarray, pd.Series]) -> np.ndarray:
+        y=np.asarray(y,dtype=float)
+        x=np.arange(len(y))
+        good=np.isfinite(y)
+
+        if good.sum()==0:
+            raise ValueError("Warped signal consists entirely of NaNs. DTW path reconstruction failed.")
+
+        if good.sum()<len(y):
+            y[~good]=np.interp(x[~good],x[good],y[good])
+
+        return y
+
+    def linear_correct_mse(template_signal: Union[List[float], np.ndarray, pd.Series], target_signal: Union[List[float], np.ndarray, pd.Series]) -> Tuple[float, float, float, float, np.ndarray]:
+        template_signal=np.asarray(template_signal,dtype=float)
+        target_signal=np.asarray(target_signal,dtype=float)
+        mse_raw=mean_squared_error(template_signal,target_signal)
+
+        A=np.vstack([target_signal,np.ones_like(target_signal)]).T
+        a,b=np.linalg.lstsq(A,template_signal,rcond=None)[0]
+        target_signal_corrected=a*target_signal+b
+        mse_corrected=mean_squared_error(template_signal,target_signal_corrected)
+
+        return mse_raw,mse_corrected,a,b,target_signal_corrected
+
+    signal_avg_1=fill_nan_by_interp(signal_avg_1).ravel()
+    signal_avg_2=fill_nan_by_interp(signal_avg_2).ravel()
+
+    if len(signal_avg_1)==0 or len(signal_avg_2)==0:
+        raise ValueError("signal_avg_1 and signal_avg_2 must contain at least one value.")
+
+    time_avg_1=np.linspace(0,1,len(signal_avg_1))
+    signal_avg_2_resampled=resample(signal_avg_2,len(signal_avg_1))
+
+    # Use smoothed curves to find peaks/valleys and calculate DTW features.
+    if smooth_sigma>0:
+        signal_1_used=gaussian_filter1d(signal_avg_1,sigma=smooth_sigma)
+        signal_2_used=gaussian_filter1d(signal_avg_2_resampled,sigma=smooth_sigma)
+    else:
+        signal_1_used=signal_avg_1.copy()
+        signal_2_used=signal_avg_2_resampled.copy()
+
+    # Peaks and valleys.
+    peaks_1,_=find_peaks(signal_1_used,prominence=prominence_value)
+    peaks_2,_=find_peaks(signal_2_used,prominence=prominence_value)
+    valleys_1,_=find_peaks(-signal_1_used,prominence=prominence_value)
+    valleys_2,_=find_peaks(-signal_2_used,prominence=prominence_value)
+
+    # Peaks = +1, valleys = -1.
+    extrema_1=np.zeros_like(signal_1_used)
+    extrema_2=np.zeros_like(signal_2_used)
+    extrema_1[peaks_1]=1
+    extrema_1[valleys_1]=-1
+    extrema_2[peaks_2]=1
+    extrema_2[valleys_2]=-1
+    extrema_1=gaussian_filter1d(extrema_1,sigma=2)
+    extrema_2=gaussian_filter1d(extrema_2,sigma=2)
+
+    # Construct peak-valley enhanced derivative-DTW features.
+    feature_1=np.column_stack([
+        signal_weight*zscore(signal_1_used),
+        derivative_weight*zscore(np.gradient(signal_1_used)),
+        extrema_weight*zscore(extrema_1)
+    ])
+
+    feature_2=np.column_stack([
+        signal_weight*zscore(signal_2_used),
+        derivative_weight*zscore(np.gradient(signal_2_used)),
+        extrema_weight*zscore(extrema_2)
+    ])
+
+    dpath,dtw_distance=dtw_path(feature_2,feature_1,global_constraint="sakoe_chiba",sakoe_chiba_radius=radius_value)
+
+    # Reconstruct signal_avg_2 based on the DTW path.
+    warped_signal_2=np.full_like(signal_avg_1,np.nan,dtype=float)
+    for signal_1_index in range(len(signal_avg_1)):
+        matched_indexes=[idx1 for idx1,idx2 in dpath if idx2==signal_1_index]
+        if matched_indexes:
+            warped_signal_2[signal_1_index]=np.mean(signal_avg_2_resampled[matched_indexes])
+
+    warped_signal_2=fill_nan_by_interp(warped_signal_2)
+
+    mse_before=mean_squared_error(signal_avg_1,signal_avg_2_resampled)
+    mse_after=mean_squared_error(signal_avg_1,warped_signal_2)
+
+    mse_before_raw,mse_before_corrected,a_before,b_before,signal_avg_2_resampled_corrected=linear_correct_mse(signal_avg_1,signal_avg_2_resampled)
+    mse_after_raw,mse_after_corrected,a_after,b_after,warped_signal_2_corrected=linear_correct_mse(signal_avg_1,warped_signal_2)
+
+    # Plot 1: DTW aligned curves.
+    alignment_figure,alignment_axis=plt.subplots(figsize=(10,5))
+    alignment_axis.plot(time_avg_1,signal_avg_1,color="black",linewidth=2,label="Average Signal 1")
+    alignment_axis.plot(time_avg_1,warped_signal_2,color="red",linestyle="--",alpha=0.85,label=f"Average Signal 2 after DTW, Radius={radius_value}")
+    alignment_axis.legend()
+    alignment_axis.set_title("Peak-Valley Enhanced Derivative-DTW Alignment")
+    alignment_axis.set_xlabel("Original Time of Average Signal 1")
+    alignment_axis.set_ylabel("Signal Current")
+    alignment_figure.tight_layout()
+    plt.show()
+
+    # Establish signal_avg_1 index -> signal_avg_2 index mapping.
+    mapping_1_to_2={}
+    for idx1,idx2 in dpath:
+        if idx2 not in mapping_1_to_2:
+            mapping_1_to_2[idx2]=[]
+        mapping_1_to_2[idx2].append(idx1)
+
+    # Plot 2: peak/valley mappings on original curves.
+    mapping_figure,mapping_axis=plt.subplots(figsize=(10,5))
+    mapping_axis.plot(time_avg_1,signal_avg_1,color="black",linewidth=2,label="Average Signal 1")
+    mapping_axis.plot(time_avg_1,signal_avg_2_resampled,color="red",linestyle="--",alpha=0.8,label="Average Signal 2 before warping")
+    mapping_axis.scatter(time_avg_1[peaks_1],signal_avg_1[peaks_1],color="black",s=55,marker="o",label="Signal 1 peaks")
+    mapping_axis.scatter(time_avg_1[valleys_1],signal_avg_1[valleys_1],color="black",s=55,marker="v",label="Signal 1 valleys")
+    mapping_axis.scatter(time_avg_1[peaks_2],signal_avg_2_resampled[peaks_2],color="red",s=55,marker="o",label="Signal 2 peaks")
+    mapping_axis.scatter(time_avg_1[valleys_2],signal_avg_2_resampled[valleys_2],color="red",s=55,marker="v",label="Signal 2 valleys")
+
+    extrema_points_1=np.sort(np.concatenate([peaks_1,valleys_1]))
+    for point_1 in extrema_points_1:
+        matched_2_list=mapping_1_to_2.get(point_1,[])
+        if len(matched_2_list)==0:
+            continue
+
+        point_2=int(np.median(matched_2_list))
+        mapping_axis.plot([time_avg_1[point_1],time_avg_1[point_2]],[signal_avg_1[point_1],signal_avg_2_resampled[point_2]],color="gray",linestyle=":",alpha=0.7)
+
+    mapping_axis.legend(fontsize=8)
+    mapping_axis.set_title(f"Peak-Valley Mapping Based on Enhanced DTW, Radius={radius_value}")
+    mapping_axis.set_xlabel("Normalized Time")
+    mapping_axis.set_ylabel("Signal Current")
+    mapping_figure.tight_layout()
+    plt.show()
+
+    mse_values={
+        "dtw_distance":float(dtw_distance),
+        "mse_before":float(mse_before),
+        "mse_after":float(mse_after),
+        "mse_before_raw":float(mse_before_raw),
+        "mse_before_corrected":float(mse_before_corrected),
+        "mse_after_raw":float(mse_after_raw),
+        "mse_after_corrected":float(mse_after_corrected),
+        "a_before":float(a_before),
+        "b_before":float(b_before),
+        "a_after":float(a_after),
+        "b_after":float(b_after)
+    }
+
+    return alignment_figure,mapping_figure,mse_values    
